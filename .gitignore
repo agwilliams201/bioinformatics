@@ -1,1 +1,4 @@
 cell-count.csv
+*.db
+.DS_Store
+outputs/
