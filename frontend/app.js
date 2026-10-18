@@ -91,6 +91,11 @@ function renderResponders({ per_subject, results }) {
 // pt 4
 function renderBaseline({ samples, summary, mean_b_cells }) {
   baselineSamples = new Set(samples);
+  // if this were meant to handle bigger data i probably would not have done this
+  // that is, i would have done it properly and had each user change in the browser be served by a new query to the backend
+  // rather than doing it all in mem
+  // but since this dataset is so small, it's cleaner/easier/actually more efficient to just do the custom queries in mem
+  // and have the generics be served by the api endpoints at boot and stored in mem. sort of like an in mem cache i guess?
   if (frequencies.length) renderFrequencies();
 
   $("baseline-rows").innerHTML = summary
