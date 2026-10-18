@@ -15,6 +15,10 @@ OUTPUT_DIR = ROOT / "outputs"
 RESPONSE_GROUPS = {"yes": ("Responders", "#2a78d6"), "no": ("Non-responders", "#eb6834")}
 
 # each population's share of its sample's total count. shared by pt 2 and pt 3
+# i could have added this into the schema to be filled at load time, but i figured that wasn't really in the spirit of the problem
+# if it were real life and i had this exact use case beforehand then that's what i would have done but felt a little hacky here
+# plus this costs almost nothing, and if we were going to do a whole bunch of other problems that don't involve freq hypotheitically,
+# it wouldnt be worth the bloat to keep on the db itself
 FREQUENCY_CTE = """
 frequency AS (
     SELECT sample_id, population, count,
@@ -66,6 +70,7 @@ def responder_comparison(db):
             "p_value": stats.ttest_ind(responders, non_responders, equal_var=False).pvalue,
         })
     results = pd.DataFrame(results)
+    # we need to adjust the p val bc there are 5 pops, if one's rel freq goes down another has to go up. so not fully independent
     results["adjusted_p_value"] = stats.false_discovery_control(results.p_value)
     results["significant"] = results.adjusted_p_value < 0.05
     return per_subject, results
@@ -138,7 +143,7 @@ def baseline_samples(db):
 
 def baseline_summary(db):
     summary = pd.read_sql(BASELINE_SUMMARY_SQL, db, index_col="project")
-    # each subject is in one project, so per-project counts add up to the total
+    # each subject is in one project so per project counts add up to the total
     summary.loc["total"] = summary.sum()
     return summary
 
@@ -149,33 +154,33 @@ def mean_baseline_b_cells(db):
 
 def main():
     if not DB_PATH.exists():
-        raise SystemExit(f"{DB_PATH.name} not found: run `python load_data.py` first")
+        raise SystemExit(f"{DB_PATH.name} not found: run python load_data.py first")
     OUTPUT_DIR.mkdir(exist_ok=True)
     db = sqlite3.connect(DB_PATH)
 
     frequencies = frequency_table(db)
     frequencies.to_csv(OUTPUT_DIR / "frequencies.csv", index=False)
-    print("Part 2: relative frequency of each population in each sample")
+    print("part 2: relative frequency of each population in each sample")
     print(frequencies.head(10).to_string(index=False, float_format="%.2f"))
     print(f"... {len(frequencies)} rows, saved to outputs/frequencies.csv\n")
 
     per_subject, results = responder_comparison(db)
     results.to_csv(OUTPUT_DIR / "responder_comparison.csv", index=False)
     plot_responder_boxplots(per_subject, results, OUTPUT_DIR / "responder_boxplots.png")
-    print("Part 3: melanoma/miraclib PBMC responders vs non-responders (mean % per subject, Welch's t-test)")
+    print("part 3: melanoma/miraclib PBMC responders vs non-responders (mean % per subject, welch's t-test)")
     print(results.to_string(index=False, float_format="%.4g"))
     significant = results.loc[results.significant, "population"].tolist()
-    print(f"Significant at adjusted p < 0.05: {', '.join(significant) or 'none'}")
-    print("Saved to outputs/responder_comparison.csv and outputs/responder_boxplots.png\n")
+    print(f"significant at adjusted p < 0.05: {', '.join(significant) or 'none'}")
+    print("saved to outputs/responder_comparison.csv and outputs/responder_boxplots.png\n")
 
-    print("Part 4: melanoma PBMC samples at baseline from miraclib-treated subjects")
+    print("part 4: melanoma PBMC samples at baseline from miraclib-treated subjects")
     baseline = baseline_samples(db)
     baseline.to_csv(OUTPUT_DIR / "baseline_samples.csv", index=False)
     print(f"{len(baseline)} samples, saved to outputs/baseline_samples.csv")
     summary = baseline_summary(db)
     summary.to_csv(OUTPUT_DIR / "baseline_summary.csv")
     print(summary.to_string())
-    print(f"Mean B cells, melanoma male responders at baseline: {mean_baseline_b_cells(db):.2f}")
+    print(f"mean B cells, melanoma male responders at baseline: {mean_baseline_b_cells(db):.2f}")
     db.close()
 
 

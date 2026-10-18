@@ -44,5 +44,5 @@ def baseline():
 
 if __name__ == "__main__":
     if not analysis.DB_PATH.exists():
-        raise SystemExit(f"{analysis.DB_PATH.name} not found: run `make pipeline` first")
+        raise SystemExit(f"{analysis.DB_PATH.name} not found: run make pipeline first")
     app.run(port=PORT)

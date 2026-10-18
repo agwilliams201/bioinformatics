@@ -1,4 +1,3 @@
-"""Create cell-count.db from cell-count.csv using the schema in schema.sql."""
 import csv
 import sqlite3
 from pathlib import Path
@@ -8,7 +7,7 @@ CSV_PATH = ROOT / "cell-count.csv"
 SCHEMA_PATH = ROOT / "schema.sql"
 DB_PATH = ROOT / "cell-count.db"
 POPULATIONS = ["b_cell", "cd8_t_cell", "cd4_t_cell", "nk_cell", "monocyte"]
-# CSV columns that each have a lookup table of the same name
+# csv columns that each have a lookup table of the same name
 LOOKUP_COLUMNS = ["project", "condition", "treatment", "sample_type"]
 
 
