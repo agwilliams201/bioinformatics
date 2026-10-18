@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Miraclib Immune Profiling</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body>
+  <main>
+    <h1>Miraclib immune profiling</h1>
+    <p class="note">Immune cell populations across the trial's samples, from the database built by <code>make pipeline</code>.</p>
+
+    <section>
+      <h2>Relative frequency of each population per sample</h2>
+      <p class="note">Each population's count as a percentage of the sample's total count across all five populations.</p>
+      <div class="controls">
+        <input id="sample-filter" placeholder="Filter by sample, e.g. sample00042">
+        <select id="population-filter"><option value="">All populations</option></select>
+        <select id="subset-filter">
+          <option value="">All samples</option>
+          <option value="baseline">Melanoma, miraclib, PBMC at baseline</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>sample</th><th class="num">total_count</th><th>population</th><th class="num">count</th><th class="num">percentage</th></tr>
+          </thead>
+          <tbody id="frequency-rows"><tr><td colspan="5">Loading…</td></tr></tbody>
+        </table>
+      </div>
+      <div class="pager">
+        <button id="prev">Previous</button>
+        <span id="page-info"></span>
+        <button id="next">Next</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Responders vs non-responders</h2>
+      <p class="note">
+        Melanoma patients on miraclib, PBMC samples only. Each subject's percentages are averaged over
+        their time points, so every subject counts once. Groups are compared with Welch's t-test, and
+        p-values are adjusted for testing five populations (Benjamini–Hochberg).
+      </p>
+      <div id="boxplot"></div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>population</th><th class="num">responders (mean %)</th><th class="num">non-responders (mean %)</th>
+              <th class="num">p-value</th><th class="num">adjusted p-value</th><th>significant</th>
+            </tr>
+          </thead>
+          <tbody id="stats-rows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>Baseline subset</h2>
+      <p class="note">
+        Melanoma PBMC samples at baseline (time 0) from patients treated with miraclib. To see the samples
+        themselves, choose "Melanoma, miraclib, PBMC at baseline" in the sample dropdown of the table above.
+        prj2 collected only whole blood (WB), so it has no PBMC samples.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>project</th><th class="num">samples</th><th class="num">responders</th>
+              <th class="num">non-responders</th><th class="num">male</th><th class="num">female</th>
+            </tr>
+          </thead>
+          <tbody id="baseline-rows"></tbody>
+        </table>
+      </div>
+      <p class="note table-note">Responders, non-responders, male and female count subjects.</p>
+      <p class="note">Average B cell count for melanoma male responders at time 0, across all sample types and treatments:</p>
+      <p id="mean-b-cells" class="answer"></p>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

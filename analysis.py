@@ -41,6 +41,21 @@ JOIN condition co ON co.id = su.condition_id
 """
 
 MELANOMA_MIRACLIB_PBMC = "condition = 'melanoma' AND treatment = 'miraclib' AND sample_type = 'PBMC'"
+MELANOMA_MIRACLIB_PBMC_BASELINE = f"{MELANOMA_MIRACLIB_PBMC} AND time_from_treatment_start = 0"
+
+# left join from project so projects with no matching samples show up as 0
+BASELINE_SUMMARY_SQL = f"""
+SELECT pr.name AS project,
+       COUNT(b.sample) AS samples,
+       COUNT(DISTINCT b.subject) FILTER (WHERE b.response = 'yes') AS responders,
+       COUNT(DISTINCT b.subject) FILTER (WHERE b.response = 'no') AS non_responders,
+       COUNT(DISTINCT b.subject) FILTER (WHERE b.sex = 'M') AS male,
+       COUNT(DISTINCT b.subject) FILTER (WHERE b.sex = 'F') AS female
+FROM project pr
+LEFT JOIN (SELECT * FROM ({SAMPLE_SQL}) WHERE {MELANOMA_MIRACLIB_PBMC_BASELINE}) b ON b.project = pr.name
+GROUP BY pr.name
+ORDER BY pr.name
+"""
 
 #pt 2
 def frequency_table(db):
@@ -102,13 +117,15 @@ def plot_responder_boxplots(per_subject, results, path):
     plt.close(fig)
 
 #pt 4
+def baseline_samples(db):
+    return query_samples(db, MELANOMA_MIRACLIB_PBMC_BASELINE)
+
+
 def baseline_summary(db):
-    baseline = query_samples(db, f"{MELANOMA_MIRACLIB_PBMC} AND time_from_treatment_start = 0")
-    return {
-        "Samples per project": baseline.groupby("project").size(),
-        "Subjects per response": baseline.groupby("response").subject.nunique(),
-        "Subjects per sex": baseline.groupby("sex").subject.nunique(),
-    }
+    summary = pd.read_sql(BASELINE_SUMMARY_SQL, db, index_col="project")
+    # each subject is in one project, so per-project counts add up to the total
+    summary.loc["total"] = summary.sum()
+    return summary
 
 
 def mean_baseline_b_cells(db, frequencies):
@@ -118,6 +135,8 @@ def mean_baseline_b_cells(db, frequencies):
 
 
 def main():
+    if not DB_PATH.exists():
+        raise SystemExit(f"{DB_PATH.name} not found: run `python load_data.py` first")
     OUTPUT_DIR.mkdir(exist_ok=True)
     db = sqlite3.connect(DB_PATH)
 
@@ -137,8 +156,12 @@ def main():
     print("Saved to outputs/responder_comparison.csv and outputs/responder_boxplots.png\n")
 
     print("Part 4: melanoma PBMC samples at baseline from miraclib-treated subjects")
-    for title, counts in baseline_summary(db).items():
-        print(f"{title}: {counts.to_dict()}")
+    baseline = baseline_samples(db)
+    baseline.to_csv(OUTPUT_DIR / "baseline_samples.csv", index=False)
+    print(f"{len(baseline)} samples, saved to outputs/baseline_samples.csv")
+    summary = baseline_summary(db)
+    summary.to_csv(OUTPUT_DIR / "baseline_summary.csv")
+    print(summary.to_string())
     print(f"Mean B cells, melanoma male responders at baseline: {mean_baseline_b_cells(db, frequencies):.2f}")
     db.close()
 

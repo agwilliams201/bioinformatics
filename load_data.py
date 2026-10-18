@@ -56,6 +56,8 @@ def load_row(db, row, population_ids):
 
 
 def main():
+    if not CSV_PATH.exists():
+        raise SystemExit(f"{CSV_PATH.name} not found: copy it into {ROOT}")
     DB_PATH.unlink(missing_ok=True)
     db = sqlite3.connect(DB_PATH)
     db.execute("PRAGMA foreign_keys = ON")
