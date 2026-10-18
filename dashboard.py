@@ -29,7 +29,7 @@ def frequencies():
 @app.get("/api/responders")
 def responders():
     with connect() as db:
-        per_subject, results = analysis.responder_comparison(db, analysis.frequency_table(db))
+        per_subject, results = analysis.responder_comparison(db)
     return jsonify(per_subject=per_subject.to_dict(orient="records"), results=results.to_dict(orient="records"))
 
 #pt 4
@@ -38,7 +38,7 @@ def baseline():
     with connect() as db:
         samples = analysis.baseline_samples(db)["sample"].tolist()
         summary = analysis.baseline_summary(db).reset_index().to_dict(orient="records")
-        mean_b_cells = analysis.mean_baseline_b_cells(db, analysis.frequency_table(db))
+        mean_b_cells = analysis.mean_baseline_b_cells(db)
     return jsonify(samples=samples, summary=summary, mean_b_cells=round(mean_b_cells, 2))
 
 

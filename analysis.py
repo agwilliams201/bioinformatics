@@ -14,66 +14,46 @@ DB_PATH = ROOT / "cell-count.db"
 OUTPUT_DIR = ROOT / "outputs"
 RESPONSE_GROUPS = {"yes": ("Responders", "#2a78d6"), "no": ("Non-responders", "#eb6834")}
 
-FREQUENCY_SQL = """
-SELECT s.name AS sample,
-       SUM(c.count) OVER (PARTITION BY c.sample_id) AS total_count,
-       p.name AS population,
-       c.count,
-       100.0 * c.count / SUM(c.count) OVER (PARTITION BY c.sample_id) AS percentage
-FROM cell_count c
-JOIN sample s ON s.id = c.sample_id
-JOIN population p ON p.id = c.population_id
-ORDER BY c.sample_id, c.population_id
-"""
-
-#recapitulate csv rows basically
-SAMPLE_SQL = """
-SELECT s.name AS sample, su.name AS subject, pr.name AS project, co.name AS condition,
-       su.sex, t.name AS treatment, st.response, ty.name AS sample_type,
-       s.time_from_treatment_start
-FROM sample s
-JOIN sample_type ty ON ty.id = s.sample_type_id
-JOIN subject_treatment st ON st.id = s.subject_treatment_id
-JOIN treatment t ON t.id = st.treatment_id
-JOIN subject su ON su.id = st.subject_id
-JOIN project pr ON pr.id = su.project_id
-JOIN condition co ON co.id = su.condition_id
-"""
-
-MELANOMA_MIRACLIB_PBMC = "condition = 'melanoma' AND treatment = 'miraclib' AND sample_type = 'PBMC'"
-MELANOMA_MIRACLIB_PBMC_BASELINE = f"{MELANOMA_MIRACLIB_PBMC} AND time_from_treatment_start = 0"
-
-# left join from project so projects with no matching samples show up as 0
-BASELINE_SUMMARY_SQL = f"""
-SELECT pr.name AS project,
-       COUNT(b.sample) AS samples,
-       COUNT(DISTINCT b.subject) FILTER (WHERE b.response = 'yes') AS responders,
-       COUNT(DISTINCT b.subject) FILTER (WHERE b.response = 'no') AS non_responders,
-       COUNT(DISTINCT b.subject) FILTER (WHERE b.sex = 'M') AS male,
-       COUNT(DISTINCT b.subject) FILTER (WHERE b.sex = 'F') AS female
-FROM project pr
-LEFT JOIN (SELECT * FROM ({SAMPLE_SQL}) WHERE {MELANOMA_MIRACLIB_PBMC_BASELINE}) b ON b.project = pr.name
-GROUP BY pr.name
-ORDER BY pr.name
+# each population's share of its sample's total count. shared by pt 2 and pt 3
+FREQUENCY_CTE = """
+frequency AS (
+    SELECT sample_id, population, count,
+           SUM(count) OVER (PARTITION BY sample_id) AS total_count,
+           100.0 * count / SUM(count) OVER (PARTITION BY sample_id) AS percentage
+    FROM cell_count
+)
 """
 
 #pt 2
+FREQUENCY_SQL = f"""
+WITH {FREQUENCY_CTE}
+SELECT s.name AS sample, f.total_count, f.population, f.count, f.percentage
+FROM frequency f
+JOIN sample s ON s.id = f.sample_id
+ORDER BY s.name, f.population
+"""
+
+
 def frequency_table(db):
     return pd.read_sql(FREQUENCY_SQL, db)
 
-
-def query_samples(db, where):
-    return pd.read_sql(f"SELECT * FROM ({SAMPLE_SQL}) WHERE {where}", db)
-
 #pt 3
-def responder_comparison(db, frequencies):
-    samples = query_samples(db, MELANOMA_MIRACLIB_PBMC)
-    # take avg bc 3 visits
-    per_subject = (
-        frequencies.merge(samples, on="sample")
-        .groupby(["subject", "response", "population"], as_index=False, sort=False)["percentage"]
-        .mean()
-    )
+# take avg bc 3 visits
+RESPONDER_SQL = f"""
+WITH {FREQUENCY_CTE}
+SELECT su.name AS subject, st.response, f.population, AVG(f.percentage) AS percentage
+FROM frequency f
+JOIN sample s ON s.id = f.sample_id
+JOIN subject_treatment st ON st.id = s.subject_treatment_id
+JOIN subject su ON su.id = st.subject_id
+WHERE su.condition = 'melanoma' AND st.treatment = 'miraclib' AND s.sample_type = 'PBMC'
+GROUP BY su.name, st.response, f.population
+ORDER BY f.population, su.name
+"""
+
+
+def responder_comparison(db):
+    per_subject = pd.read_sql(RESPONDER_SQL, db)
 
     results = []
     for population, group in per_subject.groupby("population", sort=False):
@@ -117,8 +97,43 @@ def plot_responder_boxplots(per_subject, results, path):
     plt.close(fig)
 
 #pt 4
+BASELINE_SAMPLES_SQL = """
+SELECT s.name AS sample, su.name AS subject, su.project, st.response, su.sex
+FROM sample s
+JOIN subject_treatment st ON st.id = s.subject_treatment_id
+JOIN subject su ON su.id = st.subject_id
+WHERE su.condition = 'melanoma' AND st.treatment = 'miraclib' AND s.sample_type = 'PBMC'
+  AND s.time_from_treatment_start = 0
+ORDER BY s.name
+"""
+
+# left join from project so projects with no matching samples show up as 0
+BASELINE_SUMMARY_SQL = f"""
+SELECT p.name AS project,
+       COUNT(b.sample) AS samples,
+       COUNT(DISTINCT b.subject) FILTER (WHERE b.response = 'yes') AS responders,
+       COUNT(DISTINCT b.subject) FILTER (WHERE b.response = 'no') AS non_responders,
+       COUNT(DISTINCT b.subject) FILTER (WHERE b.sex = 'M') AS male,
+       COUNT(DISTINCT b.subject) FILTER (WHERE b.sex = 'F') AS female
+FROM project p
+LEFT JOIN ({BASELINE_SAMPLES_SQL}) b ON b.project = p.name
+GROUP BY p.name
+ORDER BY p.name
+"""
+
+MEAN_B_CELLS_SQL = """
+SELECT AVG(c.count)
+FROM cell_count c
+JOIN sample s ON s.id = c.sample_id
+JOIN subject_treatment st ON st.id = s.subject_treatment_id
+JOIN subject su ON su.id = st.subject_id
+WHERE c.population = 'b_cell' AND su.condition = 'melanoma' AND su.sex = 'M'
+  AND st.response = 'yes' AND s.time_from_treatment_start = 0
+"""
+
+
 def baseline_samples(db):
-    return query_samples(db, MELANOMA_MIRACLIB_PBMC_BASELINE)
+    return pd.read_sql(BASELINE_SAMPLES_SQL, db)
 
 
 def baseline_summary(db):
@@ -128,10 +143,8 @@ def baseline_summary(db):
     return summary
 
 
-def mean_baseline_b_cells(db, frequencies):
-    samples = query_samples(db, "condition = 'melanoma' AND sex = 'M' AND response = 'yes' AND time_from_treatment_start = 0")
-    b_cells = frequencies[frequencies.population == "b_cell"].merge(samples, on="sample")
-    return b_cells["count"].mean()
+def mean_baseline_b_cells(db):
+    return db.execute(MEAN_B_CELLS_SQL).fetchone()[0]
 
 
 def main():
@@ -146,7 +159,7 @@ def main():
     print(frequencies.head(10).to_string(index=False, float_format="%.2f"))
     print(f"... {len(frequencies)} rows, saved to outputs/frequencies.csv\n")
 
-    per_subject, results = responder_comparison(db, frequencies)
+    per_subject, results = responder_comparison(db)
     results.to_csv(OUTPUT_DIR / "responder_comparison.csv", index=False)
     plot_responder_boxplots(per_subject, results, OUTPUT_DIR / "responder_boxplots.png")
     print("Part 3: melanoma/miraclib PBMC responders vs non-responders (mean % per subject, Welch's t-test)")
@@ -162,7 +175,7 @@ def main():
     summary = baseline_summary(db)
     summary.to_csv(OUTPUT_DIR / "baseline_summary.csv")
     print(summary.to_string())
-    print(f"Mean B cells, melanoma male responders at baseline: {mean_baseline_b_cells(db, frequencies):.2f}")
+    print(f"Mean B cells, melanoma male responders at baseline: {mean_baseline_b_cells(db):.2f}")
     db.close()
 
 
