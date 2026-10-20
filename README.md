@@ -6,7 +6,7 @@
 
 as per the problem statement:
 
-2. make setup installs the python dependencies from requirements.txt
+2. make setup creates a virtual environment in .venv and installs the python dependencies from requirements.txt into it
 3. make pipeline builds cell-count.db (load_data.py), then runs the analysis (analysis.py),
    which prints the results and writes them to outputs/
 4. make dashboard starts the dashboard

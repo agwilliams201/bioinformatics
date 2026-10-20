@@ -1,8 +1,10 @@
-PYTHON ?= python3
+VENV = .venv
+PYTHON = $(VENV)/bin/python
 
 .PHONY: setup pipeline dashboard
 
 setup:
+	python3 -m venv $(VENV)
 	$(PYTHON) -m pip install -r requirements.txt
 
 pipeline:
