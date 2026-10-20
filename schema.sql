@@ -17,7 +17,7 @@ CREATE TABLE subject (
 
 -- unique subject/treatment combo
 -- i sort of just did this because if we're trying to make it iteratable on,
--- in many clinical trials (at least in my experience, eg move-to events)
+-- in many clinical trials (at least in my experience, eg move-to events/dynamic visit scheduling)
 -- a second drug might be given, even though that's not the case in this csv
 -- it only adds like a single join so i figured why not, but if all we care about is the data in the csv then it would be better 
 -- to drop this table and just have sample point straight to subject
